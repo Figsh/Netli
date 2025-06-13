@@ -44,14 +44,21 @@ exports.handler = async function (event, context) {
 
     // 4. Find the new workflow run
     let runId;
+    let runUrl;
     for (let i = 0; i < 10; i++) {
-      const runsRes = await fetch(`https://api.github.com/repos/${OWNER}/${REPO}/actions/runs?event=workflow_dispatch&status=queued`, {
+      const runsRes = await fetch(`https://api.github.com/repos/${OWNER}/${REPO}/actions/runs?event=workflow_dispatch`, {
         headers: { Authorization: `token ${GITHUB_TOKEN}` }
       });
       const runs = await runsRes.json();
       
       if (runs.workflow_runs && runs.workflow_runs.length > 0) {
-        runId = runs.workflow_runs[0].id;
+        // Get the latest run
+        const latestRun = runs.workflow_runs.sort(
+          (a, b) => new Date(b.created_at) - new Date(a.created_at)
+        )[0];
+        
+        runId = latestRun.id;
+        runUrl = latestRun.html_url;
         break;
       }
       await new Promise(r => setTimeout(r, 3000));
@@ -59,10 +66,9 @@ exports.handler = async function (event, context) {
 
     if (!runId) {
       return {
-        statusCode: 202,
+        statusCode: 200,
         body: JSON.stringify({ 
-          message: "Build started but run ID not found. Check GitHub Actions.",
-          status: "pending",
+          message: "Build started! Run ID not immediately available.",
           run_url: `https://github.com/${OWNER}/${REPO}/actions`
         })
       };
@@ -73,8 +79,7 @@ exports.handler = async function (event, context) {
       body: JSON.stringify({
         message: "Build started successfully!",
         run_id: runId,
-        status: "queued",
-        run_url: `https://github.com/${OWNER}/${REPO}/actions/runs/${runId}`
+        run_url: runUrl
       })
     };
   } catch (err) {
