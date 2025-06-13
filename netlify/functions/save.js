@@ -5,7 +5,7 @@ const OWNER = "Figsh";
 const REPO = "ekuApp";
 const FILE_PATH = "app/src/main/assets/index.html";
 const BRANCH = "master";
-const WORKFLOW_FILENAME = "build.yml"; // adjust if needed
+const WORKFLOW_FILENAME = "build.yml";
 
 exports.handler = async function (event, context) {
   const { content } = JSON.parse(event.body);
@@ -31,7 +31,7 @@ exports.handler = async function (event, context) {
     })
   });
 
-  // 3. Trigger the GitHub Action workflow manually
+  // 3. Trigger GitHub Action
   await fetch(`https://api.github.com/repos/${OWNER}/${REPO}/actions/workflows/${WORKFLOW_FILENAME}/dispatches`, {
     method: "POST",
     headers: {
@@ -41,44 +41,50 @@ exports.handler = async function (event, context) {
     body: JSON.stringify({ ref: BRANCH })
   });
 
-  // 4. Poll for workflow run to complete
-  let runId, status;
+  // 4. Poll for workflow run
+  let runId;
   for (let i = 0; i < 20; i++) {
     const runsRes = await fetch(`https://api.github.com/repos/${OWNER}/${REPO}/actions/runs`, {
       headers: { Authorization: `token ${GITHUB_TOKEN}` }
     });
     const runs = await runsRes.json();
     const latestRun = runs.workflow_runs.find(r => r.name === "Build Android App" && r.head_branch === BRANCH);
+    
     if (latestRun) {
       runId = latestRun.id;
-      status = latestRun.status;
-      if (status === "completed") break;
+      if (latestRun.status === "completed") break;
     }
-    await new Promise(r => setTimeout(r, 10000)); // wait 10s
+    await new Promise(r => setTimeout(r, 10000));
   }
 
-  if (status !== "completed") {
+  if (!runId) {
     return {
       statusCode: 202,
-      body: JSON.stringify({ message: "Saved but build is still running. Try again later." })
+      body: JSON.stringify({ message: "Saved but build failed to start. Check GitHub Actions." })
     };
   }
 
-  // 5. Get artifacts (APK + AAB)
+  // 5. Get artifacts
   const artifactsRes = await fetch(`https://api.github.com/repos/${OWNER}/${REPO}/actions/runs/${runId}/artifacts`, {
     headers: { Authorization: `token ${GITHUB_TOKEN}` }
   });
   const artifacts = await artifactsRes.json();
 
-  const apkArtifact = artifacts.artifacts.find(a => a.name.includes("apk") || a.name.includes("android-binaries"));
-  const aabArtifact = artifacts.artifacts.find(a => a.name.includes("aab") || a.name.includes("android-binaries"));
+  // 6. Generate public download URLs
+  const generateDownloadLinks = (artifacts) => {
+    return artifacts.map(artifact => ({
+      name: artifact.name,
+      url: `https://github.com/${OWNER}/${REPO}/suites/${artifact.workflow_run.id}/artifacts/${artifact.id}`
+    }));
+  };
+
+  const downloadLinks = generateDownloadLinks(artifacts.artifacts);
 
   return {
     statusCode: 200,
     body: JSON.stringify({
       message: "File saved and build complete.",
-      apk_url: apkArtifact?.archive_download_url,
-      aab_url: aabArtifact?.archive_download_url
+      links: downloadLinks
     })
   };
 };
