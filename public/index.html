@@ -1,15 +1,45 @@
 <!DOCTYPE html>
 <html>
+<head>
+  <style>
+    /* Fixed CSS */
+    #searchInput:focus + svg {
+        color: #3b82f6; /* Fixed 6-digit hex */
+    }
+
+    @keyframes pulse {
+        0% { transform: scale(1); }
+        50% { transform: scale(1.1); }
+        100% { transform: scale(1); }
+    }
+
+    .downloading {
+        animation: pulse 1s infinite; /* Fixed time unit */
+    }
+    
+    #status {
+      margin-top: 20px;
+      padding: 15px;
+      border: 1px solid #ddd;
+      border-radius: 5px;
+      background-color: #f9f9f9;
+    }
+    
+    .status-item {
+      margin: 5px 0;
+    }
+  </style>
+</head>
 <body>
   <h2>Edit File Content</h2>
   <textarea id="editor" rows="20" cols="80">Loading...</textarea><br>
   <button onclick="saveToGitHub()">Save to GitHub</button>
   
-  <div id="status" style="margin-top: 20px; display: none;">
+  <div id="status" style="display: none;">
     <h3>Build Status</h3>
-    <div id="status-message">Processing...</div>
-    <div id="status-details"></div>
-    <div id="artifacts" style="margin-top: 10px;"></div>
+    <div class="status-item">Status: <span id="status-text">Processing...</span></div>
+    <div class="status-item" id="run-details"></div>
+    <div class="status-item" id="artifacts"></div>
   </div>
 
   <script>
@@ -18,19 +48,22 @@
       .then(res => res.text())
       .then(data => {
         document.getElementById("editor").value = data;
+      })
+      .catch(() => {
+        document.getElementById("editor").value = "// Default content here";
       });
 
     function saveToGitHub() {
       const content = document.getElementById("editor").value;
       const statusDiv = document.getElementById("status");
-      const statusMsg = document.getElementById("status-message");
-      const statusDetails = document.getElementById("status-details");
+      const statusText = document.getElementById("status-text");
+      const runDetails = document.getElementById("run-details");
       const artifactsDiv = document.getElementById("artifacts");
       
       // Reset UI
       statusDiv.style.display = "block";
-      statusMsg.innerHTML = "Starting build process...";
-      statusDetails.innerHTML = "";
+      statusText.textContent = "Starting build process...";
+      runDetails.innerHTML = "";
       artifactsDiv.innerHTML = "";
       
       // Start save process
@@ -44,26 +77,27 @@
         if (data.error) throw new Error(data.error);
         
         if (data.run_id) {
-          statusMsg.innerHTML = `Build started! Status: <b>${data.status}</b>`;
-          statusDetails.innerHTML = `
+          statusText.textContent = "Build started! Polling status...";
+          runDetails.innerHTML = `
             <div>Run ID: ${data.run_id}</div>
             <div><a href="${data.run_url}" target="_blank">View on GitHub</a></div>
           `;
           pollBuildStatus(data.run_id);
         } else {
-          statusMsg.innerHTML = data.message;
+          statusText.textContent = data.message || "Build started!";
           if (data.run_url) {
-            statusDetails.innerHTML = `<a href="${data.run_url}" target="_blank">Check GitHub Actions</a>`;
+            runDetails.innerHTML = `<a href="${data.run_url}" target="_blank">Check GitHub Actions</a>`;
           }
         }
       })
       .catch(err => {
-        statusMsg.innerHTML = `Error: ${err.message}`;
+        statusText.textContent = `Error: ${err.message}`;
+        console.error(err);
       });
     }
 
     function pollBuildStatus(runId) {
-      const statusMsg = document.getElementById("status-message");
+      const statusText = document.getElementById("status-text");
       const artifactsDiv = document.getElementById("artifacts");
       
       const poll = () => {
@@ -72,26 +106,25 @@
           .then(data => {
             if (data.error) throw new Error(data.error);
             
-            statusMsg.innerHTML = `Build status: <b>${data.status}</b>`;
+            statusText.textContent = `Status: ${data.status}`;
             
             if (data.conclusion) {
-              statusMsg.innerHTML += ` | Conclusion: <b>${data.conclusion}</b>`;
+              statusText.textContent += ` | Conclusion: ${data.conclusion}`;
             }
             
             if (data.artifacts && data.artifacts.length > 0) {
-              artifactsDiv.innerHTML = "<h4>Download Artifacts:</h4>";
+              artifactsDiv.innerHTML = "<strong>Download Artifacts:</strong>";
               data.artifacts.forEach(artifact => {
                 const link = document.createElement("a");
                 link.href = artifact.download_url;
                 link.target = "_blank";
                 link.textContent = artifact.name;
+                link.className = "downloading"; // Add pulse animation
                 link.style.display = "block";
                 link.style.margin = "5px 0";
                 artifactsDiv.appendChild(link);
               });
-              
-              // Stop polling when artifacts are available
-              return;
+              return; // Stop polling
             }
             
             // Continue polling if not completed
@@ -100,7 +133,7 @@
             }
           })
           .catch(err => {
-            statusMsg.innerHTML = `Status check error: ${err.message}`;
+            statusText.textContent = `Status check error: ${err.message}`;
           });
       };
       
@@ -110,4 +143,3 @@
   </script>
 </body>
 </html>
-
