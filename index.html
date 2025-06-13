@@ -1,0 +1,31 @@
+<!-- public/index.html -->
+<!DOCTYPE html>
+<html>
+  <body>
+    <h2>Edit File Content</h2>
+    <textarea id="editor" rows="20" cols="80">Loading...</textarea><br>
+    <button onclick="saveToGitHub()">Save to GitHub</button>
+
+    <script>
+      // (Optional) Load existing content
+      fetch("https://raw.githubusercontent.com/YOUR_USERNAME/YOUR_REPO/main/index.html")
+        .then(res => res.text())
+        .then(data => {
+          document.getElementById("editor").value = data;
+        });
+
+      function saveToGitHub() {
+        const content = document.getElementById("editor").value;
+
+        fetch("/.netlify/functions/save", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ content })
+        })
+        .then(res => res.json())
+        .then(data => alert("Saved!"))
+        .catch(err => alert("Error: " + err));
+      }
+    </script>
+  </body>
+</html>
