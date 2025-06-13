@@ -1,37 +1,112 @@
 <!DOCTYPE html>
 <html>
-  <body>
-    <h2>Edit File Content</h2>
-    <textarea id="editor" rows="20" cols="80">Loading...</textarea><br>
-    <button onclick="saveToGitHub()">Save to GitHub</button>
+<body>
+  <h2>Edit File Content</h2>
+  <textarea id="editor" rows="20" cols="80">Loading...</textarea><br>
+  <button onclick="saveToGitHub()">Save to GitHub</button>
+  
+  <div id="status" style="margin-top: 20px; display: none;">
+    <h3>Build Status</h3>
+    <div id="status-message">Processing...</div>
+    <div id="status-details"></div>
+    <div id="artifacts" style="margin-top: 10px;"></div>
+  </div>
 
-<script>
-  function saveToGitHub() {
-    const content = document.getElementById("editor").value;
+  <script>
+    // Load initial content
+    fetch("https://raw.githubusercontent.com/Figsh/ekuApp/master/app/src/main/assets/index.html")
+      .then(res => res.text())
+      .then(data => {
+        document.getElementById("editor").value = data;
+      });
 
-    fetch("/.netlify/functions/save", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ content })
-    })
-    .then(res => res.json())
-    .then(data => {
-      alert("Saved!");
+    function saveToGitHub() {
+      const content = document.getElementById("editor").value;
+      const statusDiv = document.getElementById("status");
+      const statusMsg = document.getElementById("status-message");
+      const statusDetails = document.getElementById("status-details");
+      const artifactsDiv = document.getElementById("artifacts");
       
-      // Create download links
-      if (data.links && data.links.length > 0) {
-        data.links.forEach(link => {
-          const a = document.createElement("a");
-          a.href = link.url;
-          a.target = "_blank";
-          a.textContent = `Download ${link.name}`;
-          a.style.display = "block";
-          document.body.appendChild(a);
-        });
-      }
-    })
-    .catch(err => alert("Error: " + err));
-  }
-</script>
-  </body>
+      // Reset UI
+      statusDiv.style.display = "block";
+      statusMsg.innerHTML = "Starting build process...";
+      statusDetails.innerHTML = "";
+      artifactsDiv.innerHTML = "";
+      
+      // Start save process
+      fetch("/.netlify/functions/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content })
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.error) throw new Error(data.error);
+        
+        if (data.run_id) {
+          statusMsg.innerHTML = `Build started! Status: <b>${data.status}</b>`;
+          statusDetails.innerHTML = `
+            <div>Run ID: ${data.run_id}</div>
+            <div><a href="${data.run_url}" target="_blank">View on GitHub</a></div>
+          `;
+          pollBuildStatus(data.run_id);
+        } else {
+          statusMsg.innerHTML = data.message;
+          if (data.run_url) {
+            statusDetails.innerHTML = `<a href="${data.run_url}" target="_blank">Check GitHub Actions</a>`;
+          }
+        }
+      })
+      .catch(err => {
+        statusMsg.innerHTML = `Error: ${err.message}`;
+      });
+    }
+
+    function pollBuildStatus(runId) {
+      const statusMsg = document.getElementById("status-message");
+      const artifactsDiv = document.getElementById("artifacts");
+      
+      const poll = () => {
+        fetch(`/.netlify/functions/status?run_id=${runId}`)
+          .then(res => res.json())
+          .then(data => {
+            if (data.error) throw new Error(data.error);
+            
+            statusMsg.innerHTML = `Build status: <b>${data.status}</b>`;
+            
+            if (data.conclusion) {
+              statusMsg.innerHTML += ` | Conclusion: <b>${data.conclusion}</b>`;
+            }
+            
+            if (data.artifacts && data.artifacts.length > 0) {
+              artifactsDiv.innerHTML = "<h4>Download Artifacts:</h4>";
+              data.artifacts.forEach(artifact => {
+                const link = document.createElement("a");
+                link.href = artifact.download_url;
+                link.target = "_blank";
+                link.textContent = artifact.name;
+                link.style.display = "block";
+                link.style.margin = "5px 0";
+                artifactsDiv.appendChild(link);
+              });
+              
+              // Stop polling when artifacts are available
+              return;
+            }
+            
+            // Continue polling if not completed
+            if (data.status !== "completed") {
+              setTimeout(poll, 5000);
+            }
+          })
+          .catch(err => {
+            statusMsg.innerHTML = `Status check error: ${err.message}`;
+          });
+      };
+      
+      // Start polling
+      setTimeout(poll, 3000);
+    }
+  </script>
+</body>
 </html>
