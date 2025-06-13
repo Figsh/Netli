@@ -2,21 +2,20 @@
 <html>
 <head>
   <style>
-    /* Fixed CSS */
     #searchInput:focus + svg {
-        color: #3b82f6; /* Fixed 6-digit hex */
+      color: #3b82f6;
     }
 
     @keyframes pulse {
-        0% { transform: scale(1); }
-        50% { transform: scale(1.1); }
-        100% { transform: scale(1); }
+      0% { transform: scale(1); }
+      50% { transform: scale(1.1); }
+      100% { transform: scale(1); }
     }
 
     .downloading {
-        animation: pulse 1s infinite; /* Fixed time unit */
+      animation: pulse 1s infinite;
     }
-    
+
     #status {
       margin-top: 20px;
       padding: 15px;
@@ -24,16 +23,21 @@
       border-radius: 5px;
       background-color: #f9f9f9;
     }
-    
+
     .status-item {
       margin: 5px 0;
     }
   </style>
 </head>
 <body>
-  <h2>Edit File Content</h2>
+  <h2>Edit Web App</h2>
+  
+  <label>App Name: <input type="text" id="appName" placeholder="My WebApp" /></label><br><br>
+
+  <label>App Icon (PNG): <input type="file" id="iconFile" accept="image/png" /></label><br><br>
+
   <textarea id="editor" rows="20" cols="80">Loading...</textarea><br>
-  <button onclick="saveToGitHub()">Save to GitHub</button>
+  <button onclick="saveToGitHub()">Save to GitHub & Build</button>
   
   <div id="status" style="display: none;">
     <h3>Build Status</h3>
@@ -43,7 +47,7 @@
   </div>
 
   <script>
-    // Load initial content
+    // Load default content
     fetch("https://raw.githubusercontent.com/Figsh/ekuApp/master/app/src/main/assets/index.html")
       .then(res => res.text())
       .then(data => {
@@ -55,63 +59,75 @@
 
     function saveToGitHub() {
       const content = document.getElementById("editor").value;
+      const appName = document.getElementById("appName").value || "MyApp";
+
+      const iconFile = document.getElementById("iconFile").files[0];
+
       const statusDiv = document.getElementById("status");
       const statusText = document.getElementById("status-text");
       const runDetails = document.getElementById("run-details");
       const artifactsDiv = document.getElementById("artifacts");
-      
-      // Reset UI
+
       statusDiv.style.display = "block";
-      statusText.textContent = "Starting build process...";
+      statusText.textContent = "Starting build...";
       runDetails.innerHTML = "";
       artifactsDiv.innerHTML = "";
-      
-      // Start save process
-      fetch("/.netlify/functions/save", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content })
-      })
-      .then(res => res.json())
-      .then(data => {
-        if (data.error) throw new Error(data.error);
-        
-        if (data.run_id) {
-          statusText.textContent = "Build started! Polling status...";
-          runDetails.innerHTML = `
-            <div>Run ID: ${data.run_id}</div>
-            <div><a href="${data.run_url}" target="_blank">View on GitHub</a></div>
-          `;
-          pollBuildStatus(data.run_id);
-        } else {
-          statusText.textContent = data.message || "Build started!";
-          if (data.run_url) {
-            runDetails.innerHTML = `<a href="${data.run_url}" target="_blank">Check GitHub Actions</a>`;
+
+      if (!iconFile) {
+        return alert("Please select an app icon PNG file.");
+      }
+
+      const reader = new FileReader();
+      reader.onload = () => {
+        const iconBase64 = reader.result.split(',')[1];
+
+        fetch("/.netlify/functions/save", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            content,
+            appName,
+            iconBase64
+          })
+        })
+        .then(res => res.json())
+        .then(data => {
+          if (data.error) throw new Error(data.error);
+
+          if (data.run_id) {
+            statusText.textContent = "Build started! Polling status...";
+            runDetails.innerHTML = `
+              <div>Run ID: ${data.run_id}</div>
+              <div><a href="${data.run_url}" target="_blank">View on GitHub</a></div>
+            `;
+            pollBuildStatus(data.run_id);
+          } else {
+            statusText.textContent = data.message || "Build triggered!";
+            if (data.run_url) {
+              runDetails.innerHTML = `<a href="${data.run_url}" target="_blank">View Actions</a>`;
+            }
           }
-        }
-      })
-      .catch(err => {
-        statusText.textContent = `Error: ${err.message}`;
-        console.error(err);
-      });
+        })
+        .catch(err => {
+          statusText.textContent = `Error: ${err.message}`;
+        });
+      };
+      reader.readAsDataURL(iconFile);
     }
 
     function pollBuildStatus(runId) {
       const statusText = document.getElementById("status-text");
       const artifactsDiv = document.getElementById("artifacts");
-      
+
       const poll = () => {
         fetch(`/.netlify/functions/status?run_id=${runId}`)
           .then(res => res.json())
           .then(data => {
             if (data.error) throw new Error(data.error);
-            
+
             statusText.textContent = `Status: ${data.status}`;
-            
-            if (data.conclusion) {
-              statusText.textContent += ` | Conclusion: ${data.conclusion}`;
-            }
-            
+            if (data.conclusion) statusText.textContent += ` | Conclusion: ${data.conclusion}`;
+
             if (data.artifacts && data.artifacts.length > 0) {
               artifactsDiv.innerHTML = "<strong>Download Artifacts:</strong>";
               data.artifacts.forEach(artifact => {
@@ -119,25 +135,20 @@
                 link.href = artifact.download_url;
                 link.target = "_blank";
                 link.textContent = artifact.name;
-                link.className = "downloading"; // Add pulse animation
+                link.className = "downloading";
                 link.style.display = "block";
-                link.style.margin = "5px 0";
                 artifactsDiv.appendChild(link);
               });
-              return; // Stop polling
+              return;
             }
-            
-            // Continue polling if not completed
-            if (data.status !== "completed") {
-              setTimeout(poll, 5000);
-            }
+
+            if (data.status !== "completed") setTimeout(poll, 5000);
           })
           .catch(err => {
             statusText.textContent = `Status check error: ${err.message}`;
           });
       };
-      
-      // Start polling
+
       setTimeout(poll, 3000);
     }
   </script>
