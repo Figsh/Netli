@@ -23,7 +23,23 @@
           body: JSON.stringify({ content })
         })
         .then(res => res.json())
-        .then(data => alert("Saved!"))
+        .then(data => {
+  alert("Saved!");
+  if (data.apk_url) {
+    const a = document.createElement("a");
+    a.href = data.apk_url;
+    a.textContent = "Download APK";
+    a.target = "_blank";
+    document.body.appendChild(a);
+  }
+  if (data.aab_url) {
+    const a = document.createElement("a");
+    a.href = data.aab_url;
+    a.textContent = "Download AAB";
+    a.target = "_blank";
+    document.body.appendChild(a);
+  }
+})
         .catch(err => alert("Error: " + err));
       }
     </script>
