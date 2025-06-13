@@ -1,29 +1,12 @@
 <!DOCTYPE html>
 <html>
-  <head>
-    <title>Web App Editor</title>
-    <style>
-      textarea {
-        width: 100%;
-        height: 300px;
-        font-family: monospace;
-        font-size: 14px;
-      }
-    </style>
-  </head>
   <body>
     <h2>Edit File Content</h2>
-    <textarea id="editor">Loading...</textarea><br>
-    <button onclick="saveToGitHub()">💾 Save to GitHub</button>
-
-    <h3>Download Android App</h3>
-    <p>
-      <a id="apkLink" href="#" target="_blank" style="display:none;">⬇ Download APK</a><br>
-      <a id="aabLink" href="#" target="_blank" style="display:none;">⬇ Download AAB</a>
-    </p>
+    <textarea id="editor" rows="20" cols="80">Loading...</textarea><br>
+    <button onclick="saveToGitHub()">Save to GitHub</button>
 
     <script>
-      // Load current file content
+      // (Optional) Load existing content
       fetch("https://raw.githubusercontent.com/Figsh/ekuApp/master/app/src/main/assets/index.html")
         .then(res => res.text())
         .then(data => {
@@ -40,18 +23,21 @@
         })
         .then(res => res.json())
         .then(data => {
-          alert("✅ Saved! Rebuilding APK...");
-
-          // Show download links (automatically updated via GitHub release)
-          document.getElementById("apkLink").href =
-            "https://github.com/Figsh/ekuApp/releases/download/latest-build/app-release.apk";
-          document.getElementById("apkLink").style.display = "inline";
-
-          document.getElementById("aabLink").href =
-            "https://github.com/Figsh/ekuApp/releases/download/latest-build/app-release.aab";
-          document.getElementById("aabLink").style.display = "inline";
-        })
-        .catch(err => alert("❌ Error: " + err));
+  alert("Saved!");
+  if (data.apk_url) {
+    const a = document.createElement("a");
+    a.href = data.apk_url;
+    a.textContent = "Download APK";
+    document.body.appendChild(a);
+  }
+  if (data.aab_url) {
+    const a = document.createElement("a");
+    a.href = data.aab_url;
+    a.textContent = "Download AAB";
+    document.body.appendChild(a);
+  }
+})
+        .catch(err => alert("Error: " + err));
       }
     </script>
   </body>
