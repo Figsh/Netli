@@ -4,7 +4,7 @@ const fetch = require("node-fetch");
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 const OWNER = "Figsh";
 const REPO = "ekuApp";
-const FILE_PATH = "app/src/main/asset/index.html"; // file to update
+const FILE_PATH = "app/src/main/assets/index.html"; // file to update
 const BRANCH = "main";
 
 exports.handler = async function (event, context) {
