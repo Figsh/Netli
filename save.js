@@ -2,8 +2,8 @@
 const fetch = require("node-fetch");
 
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
-const OWNER = "your-username";
-const REPO = "your-repo";
+const OWNER = "Figsh";
+const REPO = "cEdit";
 const FILE_PATH = "index.html"; // file to update
 const BRANCH = "main";
 
