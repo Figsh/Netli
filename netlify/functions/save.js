@@ -4,13 +4,21 @@ const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 const OWNER = "Figsh";
 const REPO = "ekuApp";
 const FILE_PATH = "app/src/main/assets/index.html";
-const ICON_PATH = "app/src/main/res/mipmap-hdpi/ic_launcher.png";
 const NAME_PATH = "app/src/main/res/values/strings.xml";
 const BRANCH = "master";
 const WORKFLOW_FILENAME = "build.yml";
 
+// Define mipmap directories
+const MIPMAP_PATHS = {
+  "mipmap-mdpi.png": "app/src/main/res/mipmap-mdpi/ic_launcher.png",
+  "mipmap-hdpi.png": "app/src/main/res/mipmap-hdpi/ic_launcher.png",
+  "mipmap-xhdpi.png": "app/src/main/res/mipmap-xhdpi/ic_launcher.png",
+  "mipmap-xxhdpi.png": "app/src/main/res/mipmap-xxhdpi/ic_launcher.png",
+  "mipmap-xxxhdpi.png": "app/src/main/res/mipmap-xxxhdpi/ic_launcher.png"
+};
+
 exports.handler = async function (event, context) {
-  const { content, appName, iconBase64 } = JSON.parse(event.body);
+  const { content, appName, icons } = JSON.parse(event.body);
 
   try {
     // 1. Update index.html
@@ -33,26 +41,43 @@ exports.handler = async function (event, context) {
       })
     });
 
-    // 2. Update app icon
-    if (iconBase64) {
-      const iconRes = await fetch(`https://api.github.com/repos/${OWNER}/${REPO}/contents/${ICON_PATH}`, {
-        headers: { Authorization: `token ${GITHUB_TOKEN}` }
-      });
-      const iconFile = await iconRes.json();
+    // 2. Update app icons
+    if (icons && Array.isArray(icons)) {
+      for (const icon of icons) {
+        const { name, base64 } = icon;
+        const iconPath = MIPMAP_PATHS[name];
 
-      await fetch(`https://api.github.com/repos/${OWNER}/${REPO}/contents/${ICON_PATH}`, {
-        method: "PUT",
-        headers: {
-          Authorization: `token ${GITHUB_TOKEN}`,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          message: "Updated app icon via Netlify",
-          content: iconBase64,
-          sha: iconFile.sha,
-          branch: BRANCH
-        })
-      });
+        if (!iconPath) {
+          throw new Error(`Invalid icon file name: ${name}. Expected one of ${Object.keys(MIPMAP_PATHS).join(", ")}`);
+        }
+
+        // Fetch existing file to get SHA
+        const iconRes = await fetch(`https://api.github.com/repos/${OWNER}/${REPO}/contents/${iconPath}`, {
+          headers: { Authorization: `token ${GITHUB_TOKEN}` }
+        });
+        const iconFile = await iconRes.json();
+
+        if (!iconFile.sha) {
+          throw new Error(`Could not fetch SHA for ${iconPath}. Ensure the file exists in the repository.`);
+        }
+
+        // Update icon file
+        await fetch(`https://api.github.com/repos/${OWNER}/${REPO}/contents/${iconPath}`, {
+          method: "PUT",
+          headers: {
+            Authorization: `token ${GITHUB_TOKEN}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            message: `Updated ${name} via Netlify`,
+            content: base64,
+            sha: iconFile.sha,
+            branch: BRANCH
+          })
+        });
+      }
+    } else {
+      throw new Error("No icons provided or invalid format.");
     }
 
     // 3. Update app name in strings.xml
