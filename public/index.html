@@ -27,6 +27,18 @@
     .status-item {
       margin: 5px 0;
     }
+
+    #iconList {
+      margin-top: 10px;
+      padding: 10px;
+      border: 1px solid #ddd;
+      border-radius: 5px;
+      background-color: #fff;
+    }
+
+    .error {
+      color: red;
+    }
   </style>
 </head>
 <body>
@@ -34,7 +46,10 @@
   
   <label>App Name: <input type="text" id="appName" placeholder="My WebApp" /></label><br><br>
 
-  <label>App Icon (PNG): <input type="file" id="iconFile" accept="image/png" /></label><br><br>
+  <label>App Icons (PNG, mipmap-*): 
+    <input type="file" id="iconFiles" accept="image/png" multiple />
+  </label><br>
+  <div id="iconList"></div><br>
 
   <textarea id="editor" rows="20" cols="80">Loading...</textarea><br>
   <button onclick="saveToGitHub()">Save to GitHub & Build</button>
@@ -47,6 +62,15 @@
   </div>
 
   <script>
+    // Expected mipmap types
+    const requiredMipmaps = [
+      'mipmap-mdpi.png',
+      'mipmap-hdpi.png',
+      'mipmap-xhdpi.png',
+      'mipmap-xxhdpi.png',
+      'mipmap-xxxhdpi.png'
+    ];
+
     // Load default content
     fetch("https://raw.githubusercontent.com/Figsh/ekuApp/master/app/src/main/assets/index.html")
       .then(res => res.text())
@@ -57,11 +81,25 @@
         document.getElementById("editor").value = "// Default content here";
       });
 
+    // Display uploaded files
+    document.getElementById("iconFiles").addEventListener("change", function () {
+      const files = this.files;
+      const iconList = document.getElementById("iconList");
+      iconList.innerHTML = "<strong>Uploaded Icons:</strong><ul>";
+
+      Array.from(files).forEach(file => {
+        const isValidMipmap = requiredMipmaps.includes(file.name);
+        iconList.innerHTML += `<li class="${isValidMipmap ? '' : 'error'}">${file.name} ${
+          isValidMipmap ? '' : '(Invalid: Must be one of ' + requiredMipmaps.join(', ') + ')'
+        }</li>`;
+      });
+      iconList.innerHTML += "</ul>";
+    });
+
     function saveToGitHub() {
       const content = document.getElementById("editor").value;
       const appName = document.getElementById("appName").value || "MyApp";
-
-      const iconFile = document.getElementById("iconFile").files[0];
+      const iconFiles = document.getElementById("iconFiles").files;
 
       const statusDiv = document.getElementById("status");
       const statusText = document.getElementById("status-text");
@@ -73,46 +111,71 @@
       runDetails.innerHTML = "";
       artifactsDiv.innerHTML = "";
 
-      if (!iconFile) {
-        return alert("Please select an app icon PNG file.");
+      // Validate uploaded files
+      if (iconFiles.length === 0) {
+        statusText.textContent = "Error: Please select at least one mipmap PNG file.";
+        return;
       }
 
-      const reader = new FileReader();
-      reader.onload = () => {
-        const iconBase64 = reader.result.split(',')[1];
+      const uploadedFileNames = Array.from(iconFiles).map(file => file.name);
+      const missingMipmaps = requiredMipmaps.filter(name => !uploadedFileNames.includes(name));
+      if (missingMipmaps.length > 0) {
+        statusText.textContent = `Error: Missing required mipmap files: ${missingMipmaps.join(', ')}`;
+        return;
+      }
 
-        fetch("/.netlify/functions/save", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            content,
-            appName,
-            iconBase64
+      const invalidFiles = uploadedFileNames.filter(name => !requiredMipmaps.includes(name));
+      if (invalidFiles.length > 0) {
+        statusText.textContent = `Error: Invalid files uploaded: ${invalidFiles.join(', ')}. Only ${requiredMipmaps.join(', ')} are allowed.`;
+        return;
+      }
+
+      // Convert files to base64
+      const filePromises = Array.from(iconFiles).map(file => {
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve({ name: file.name, base64: reader.result.split(',')[1] });
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+      });
+
+      Promise.all(filePromises)
+        .then(iconData => {
+          fetch("/.netlify/functions/save", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              content,
+              appName,
+              icons: iconData // Send array of { name, base64 }
+            })
           })
-        })
-        .then(res => res.json())
-        .then(data => {
-          if (data.error) throw new Error(data.error);
+          .then(res => res.json())
+          .then(data => {
+            if (data.error) throw new Error(data.error);
 
-          if (data.run_id) {
-            statusText.textContent = "Build started! Polling status...";
-            runDetails.innerHTML = `
-              <div>Run ID: ${data.run_id}</div>
-              <div><a href="${data.run_url}" target="_blank">View on GitHub</a></div>
-            `;
-            pollBuildStatus(data.run_id);
-          } else {
-            statusText.textContent = data.message || "Build triggered!";
-            if (data.run_url) {
-              runDetails.innerHTML = `<a href="${data.run_url}" target="_blank">View Actions</a>`;
+            if (data.run_id) {
+              statusText.textContent = "Build started! Polling status...";
+              runDetails.innerHTML = `
+                <div>Run ID: ${data.run_id}</div>
+                <div><a href="${data.run_url}" target="_blank">View on GitHub</a></div>
+              `;
+              pollBuildStatus(data.run_id);
+            } else {
+              statusText.textContent = data.message || "Build triggered!";
+              if (data.run_url) {
+                runDetails.innerHTML = `<a href="${data.run_url}" target="_blank">View Actions</a>`;
+              }
             }
-          }
+          })
+          .catch(err => {
+            statusText.textContent = `Error: ${err.message}`;
+          });
         })
         .catch(err => {
-          statusText.textContent = `Error: ${err.message}`;
+          statusText.textContent = `Error reading files: ${err.message}`;
         });
-      };
-      reader.readAsDataURL(iconFile);
     }
 
     function pollBuildStatus(runId) {
