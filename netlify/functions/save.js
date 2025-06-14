@@ -14,7 +14,9 @@ const MIPMAP_PATHS = {
   "mipmap-hdpi.png": "app/src/main/res/mipmap-hdpi/ic_launcher.png",
   "mipmap-xhdpi.png": "app/src/main/res/mipmap-xhdpi/ic_launcher.png",
   "mipmap-xxhdpi.png": "app/src/main/res/mipmap-xxhdpi/ic_launcher.png",
-  "mipmap-xxxhdpi.png": "app/src/main/res/mipmap-xxxhdpi/ic_launcher.png"
+  "mipmap-xxxhdpi.png": "app/src/main/res/mipmap-xxxhdpi/ic_launcher.png", 
+  "mipmap-xxxhdpi.png": "app/src/main/ic_launcher-web.png", 
+  "mipmap-xxxhdpi.png": "app/src/main/res/ic_launcher.png"
 };
 
 exports.handler = async function (event, context) {
